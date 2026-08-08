@@ -1,0 +1,14 @@
+services:
+  go-alert-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-alert-test
+    env_file:
+      - .env.vps
+    networks:
+      - bbo-network
+
+networks:
+  bbo-network:
+    external: true

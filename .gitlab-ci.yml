@@ -1,0 +1,69 @@
+stages:
+  - test
+  - quality
+
+variables:
+  GIT_DEPTH: "0"
+
+test:
+  stage: test
+  tags:
+    - development-vps
+  allow_failure: false
+  timeout: 30m
+  script:
+    - |
+      echo "=== Running Tests ==="
+      go mod download
+      go test -v ./...
+      echo "=== Tests completed ==="
+  only:
+    - main
+
+sast:gosec:
+  stage: quality
+  tags:
+    - development-vps
+  needs: []
+  allow_failure: false
+  script:
+    - |
+      echo "=== Running Gosec SAST Scan ==="
+      if ! command -v gosec &> /dev/null; then
+        go install github.com/securego/gosec/v2/cmd/gosec@latest
+      fi
+      gosec -fmt json -out gosec-report.json ./... || true
+      gosec -fmt text ./... 2>&1 | tee gosec-report.txt || true
+  artifacts:
+    paths:
+      - gosec-report.json
+      - gosec-report.txt
+    expire_in: 30 days
+  only:
+    - main
+
+secret_scan:gitleaks:
+  stage: quality
+  tags:
+    - development-vps
+  needs: []
+  allow_failure: false
+  script:
+    - |
+      echo "=== Running Gitleaks Secret Scan ==="
+      if ! command -v gitleaks &> /dev/null; then
+        mkdir -p ~/.local/bin
+        GITLEAKS_VERSION="v8.30.1"
+        curl -sSfL -o /tmp/gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz"
+        tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+        install -m 0755 /tmp/gitleaks ~/.local/bin/gitleaks
+        rm -f /tmp/gitleaks.tar.gz /tmp/gitleaks
+        export PATH="$HOME/.local/bin:$PATH"
+      fi
+      gitleaks detect --source . --report-format json --report-path gitleaks-report.json --no-banner || true
+  artifacts:
+    paths:
+      - gitleaks-report.json
+    expire_in: 30 days
+  only:
+    - main
